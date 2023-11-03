@@ -1,0 +1,71 @@
+# Load required libraries
+library(shiny)
+library(shinydashboard)
+library(plotly)
+library(DT)
+
+# Sample sales data (replace this with your own dataset)
+sales_data <- data.frame(
+  Month = rep(1:12, times = 3),
+  Product = rep(c("Product A", "Product B", "Product C"), each = 12),
+  Sales = c(100, 150, 200, 120, 180, 250, 180, 220, 300, 250, 280, 350,
+            80, 120, 160, 90, 140, 180, 150, 200, 250, 200, 240, 280,
+            70, 110, 150, 100, 160, 200, 170, 220, 280, 220, 260, 300)
+)
+
+# Define UI
+ui <- dashboardPage(
+  dashboardHeader(title = "Sales Dashboard"),
+  dashboardSidebar(
+    selectInput("product", "Select Product:",
+                choices = c("TOTAL", "All", unique(sales_data$Product)),
+                selected = "TOTAL"
+    ),
+    checkboxInput("accumulate", "Show Accumulated Sales", value = FALSE)
+  ),
+  dashboardBody(
+    plotlyOutput("sales_plot"),
+    DTOutput("sales_table")
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  filtered_data <- reactive({
+    if (input$product == "TOTAL") {
+      total_sales <- sales_data %>%
+        group_by(Month) %>%
+        summarise(Sales = sum(Sales))
+      total_sales$Product <- "TOTAL"
+      total_sales
+    } else if (input$product == "All") {
+      sales_data
+    } else {
+      sales_data %>%
+        filter(Product == input$product)
+    }
+  })
+  
+  output$sales_plot <- renderPlotly({
+    data <- filtered_data()
+    if (input$accumulate) {
+      data <- data %>%
+        mutate(Sales = cumsum(Sales))
+    }
+    
+    plot_ly(data = data, x = ~Month, y = ~Sales, type = 'scatter', mode = 'lines',
+            color = ~Product, colors = "Set1") %>%
+      layout(title = ifelse(input$accumulate, "Accumulated Monthly Sales", "Monthly Sales"),
+             xaxis = list(title = "Month"),
+             yaxis = list(title = "Sales"))
+  })
+  
+  output$sales_table <- renderDT({
+    filtered_data() %>%
+      select(Month, Sales) %>%
+      datatable(options = list(paging = FALSE))
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
